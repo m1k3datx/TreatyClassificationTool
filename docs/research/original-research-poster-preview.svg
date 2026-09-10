@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760" role="img" aria-labelledby="title desc">
+  <title id="title">Preview of the original research poster</title>
+  <desc id="desc">A readable preview identifying the original poster, its research question, comparative scope, sources, workflow, and reported finding.</desc>
+  <rect width="1200" height="760" fill="#f7f3ea"/>
+  <rect x="34" y="30" width="1132" height="700" rx="12" fill="#ffffff" stroke="#1f2937" stroke-width="3"/>
+  <rect x="34" y="30" width="1132" height="118" rx="12" fill="#17324d"/>
+  <text x="68" y="78" fill="#ffffff" font-family="Arial, sans-serif" font-size="30" font-weight="700">WHO COMMITS, WHO TALKS?</text>
+  <text x="68" y="119" fill="#dcecf5" font-family="Arial, sans-serif" font-size="22">Treaty rhetoric vs commitment — original research presentation preview</text>
+  <text x="70" y="195" fill="#17324d" font-family="Arial, sans-serif" font-size="22" font-weight="700">Research question</text>
+  <text x="70" y="230" fill="#263238" font-family="Arial, sans-serif" font-size="20">Does stronger legal commitment correspond with greater</text>
+  <text x="70" y="258" fill="#263238" font-family="Arial, sans-serif" font-size="20">rhetorical engagement in legislative discourse?</text>
+  <rect x="70" y="310" width="330" height="250" fill="#e8f1f5"/>
+  <text x="94" y="350" fill="#17324d" font-family="Arial, sans-serif" font-size="22" font-weight="700">Scope</text>
+  <text x="94" y="392" fill="#263238" font-family="Arial, sans-serif" font-size="20">10 democracies</text>
+  <text x="94" y="430" fill="#263238" font-family="Arial, sans-serif" font-size="20">8 major treaties</text>
+  <text x="94" y="468" fill="#263238" font-family="Arial, sans-serif" font-size="20">1990–2017</text>
+  <text x="94" y="515" fill="#536b7a" font-family="Arial, sans-serif" font-size="16">Source details and wording</text>
+  <text x="94" y="538" fill="#536b7a" font-family="Arial, sans-serif" font-size="16">remain in the unchanged PDF.</text>
+  <rect x="435" y="310" width="330" height="250" fill="#f8eddc"/>
+  <text x="459" y="350" fill="#17324d" font-family="Arial, sans-serif" font-size="22" font-weight="700">Workflow</text>
+  <text x="459" y="395" fill="#263238" font-family="Arial, sans-serif" font-size="19">Extract treaty mentions</text>
+  <text x="459" y="435" fill="#263238" font-family="Arial, sans-serif" font-size="19">Compare discourse with</text>
+  <text x="459" y="465" fill="#263238" font-family="Arial, sans-serif" font-size="19">commitment</text>
+  <text x="459" y="510" fill="#263238" font-family="Arial, sans-serif" font-size="19">Present comparative results</text>
+  <rect x="800" y="310" width="330" height="250" fill="#e8f1f5"/>
+  <text x="824" y="350" fill="#17324d" font-family="Arial, sans-serif" font-size="22" font-weight="700">Presentation note</text>
+  <text x="824" y="395" fill="#263238" font-family="Arial, sans-serif" font-size="19">The observed relationship</text>
+  <text x="824" y="430" fill="#263238" font-family="Arial, sans-serif" font-size="19">was sensitive to including</text>
+  <text x="824" y="465" fill="#263238" font-family="Arial, sans-serif" font-size="19">the United States.</text>
+  <text x="70" y="630" fill="#17324d" font-family="Arial, sans-serif" font-size="19" font-weight="700">Named sources:</text>
+  <text x="235" y="630" fill="#263238" font-family="Arial, sans-serif" font-size="19">ParlSpeech V2 and the Congressional Record collection</text>
+  <text x="70" y="680" fill="#536b7a" font-family="Arial, sans-serif" font-size="16">Readable preview of the original research presentation. See the PDF for the unchanged poster.</text>
+</svg>
