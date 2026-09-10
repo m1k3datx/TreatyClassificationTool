@@ -26,7 +26,7 @@ class ClassifierTests(unittest.TestCase):
             "The government opposes withdrawal from the treaty.": SUPPORTING,
             "The government supports withdrawal from the treaty.": OPPOSING,
             "We support the treaty only if enforcement is strengthened.": MIXED_CONDITIONAL,
-            "The agreement was signed in 2020 by three parties.": NEUTRAL,
+            "The treaty agreement was signed in 2020 by three parties.": NEUTRAL,
             "The treaty is important.": NEEDS_REVIEW,
         }
         for text, expected in cases.items():

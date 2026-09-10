@@ -95,6 +95,10 @@ def _score(text: str, target: str) -> Classification:
     if scores[SUPPORTING] and scores[OPPOSING]:
         scores[MIXED_CONDITIONAL] += 4
         explanations.append("Mixed / Conditional: supporting and opposing evidence")
+    elif not (scores[SUPPORTING] or scores[OPPOSING]) and not re.search(
+        _PATTERNS[MIXED_CONDITIONAL][0][0], target_text, re.IGNORECASE
+    ):
+        scores[MIXED_CONDITIONAL] = 0
 
     ranked = sorted(
         ((score, category) for category, score in scores.items() if category != NEEDS_REVIEW),
