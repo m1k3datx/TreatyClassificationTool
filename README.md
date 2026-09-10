@@ -1,50 +1,57 @@
 # Treaty Classification Tool
 
-An honest, offline baseline for classifying treaty mentions. It makes no
-network calls and never requires an API key.
+[![CI](https://github.com/m1k3datx/TreatyClassificationTool/actions/workflows/ci.yml/badge.svg)](https://github.com/m1k3datx/TreatyClassificationTool/actions/workflows/ci.yml)
 
-## Stance categories
+Developed a Python treaty-analysis workflow used in my research project, Who Commits, Who Talks?, examining the relationship between international treaty commitment and legislative discourse. The project has since been improved with explainable classification rules, input validation, automated tests, and continuous integration.
 
-- **Supporting**: endorses the treaty, encourages ratification, advocates implementing it, or opposes withdrawal.
-- **Opposing**: rejects it, supports or advocates withdrawal, or favors blocking or undermining it.
-- **Mixed / Conditional**: supports some provisions but opposes others, or supports it only if conditions are met.
-- **Neutral / Descriptive**: describes the treaty without expressing support or opposition.
-- **Needs review**: insufficient or ambiguous evidence; this is the fallback, not a stance.
+![Preview of the original research poster](docs/research/original-research-poster-preview.svg)
 
-## Usage
+## Research background
 
-Python 3.9+ is required. The classifier uses only the standard library:
+The research project asks whether countries that make stronger legal commitments to international treaties also engage with those treaties more actively in legislative discourse. The original presentation compared treaty commitment and treaty mentions across democracies, using the scope and sources documented in the [case study](docs/case-study.md).
+
+## What the current tool does
+
+This repository contains an offline, deterministic baseline for classifying treaty mentions. It accepts one text or a pipe-delimited/CSV file, checks for an explicit target, assigns a conservative stance category, and returns an uncalibrated rule score, exact evidence excerpts, and rule explanations. It makes no network calls and requires no API key.
+
+## Synthetic example
+
+The following is intentionally synthetic and does not represent a research observation:
+
+```text
+Input:  We urge parliament to ratify the Aurora Climate Treaty.
+Target: Aurora Climate Treaty
+Output: Supporting
+Evidence: urge parliament to ratif, ratify
+```
+
+Reproduce the example with the current CLI:
+
+```console
+python Classifier.py --text "We urge parliament to ratify the Aurora Climate Treaty." --target "Aurora Climate Treaty"
+```
+
+The generated output is preserved in [`docs/demo/synthetic-classification-output.txt`](docs/demo/synthetic-classification-output.txt).
+
+## Quick start
+
+Python 3.9+ is required and the classifier uses only the standard library:
 
 ```console
 python Classifier.py --text "We urge parliament to ratify the Paris Agreement." --target "Paris Agreement"
 python Classifier.py speeches.txt "climate treaty" --output results.csv
-```
-
-Input files may be pipe-delimited (`speech_id|text`) or CSV with `Speech_ID`
-and `Mention` (or `id` and `text`) columns. Output includes the category,
-an uncalibrated rule score, exact evidence excerpts copied from the source,
-and separate rule explanations so results can be reviewed.
-
-The rule-based baseline is deterministic and intentionally conservative.
-Single-text classification requires an explicit `target`; when it is missing
-or absent from the text, the result is `Needs review`. File processing uses
-the search term as the target. `classify_text()` returns the full
-`Classification` object; the legacy `classify_treaty(text)` function remains
-available and returns only its category when passed `target=`.
-An LLM provider can be added behind this interface later, but no provider or
-secret is required for the baseline.
-
-The repository also includes `sample_input.txt` and the corresponding
-`sample_output.csv`. Recreate it with:
-
-```console
-python Classifier.py sample_input.txt treaty --output sample_output.csv
-```
-
-## Development
-
-Run the tests with:
-
-```console
 python -m unittest discover -s tests -v
 ```
+
+Input files may be pipe-delimited (`speech_id|text`) or CSV with `Speech_ID` and `Mention` (or `id` and `text`) columns. File processing uses the search term as the target; single-text classification requires an explicit `target`.
+
+## Project documentation
+
+- [Case study](docs/case-study.md): research context, scope, contribution, and limitations.
+- [Methodology notes](docs/methodology.md): current rule-based workflow and review boundaries.
+- [Original research poster](docs/research/original-research-poster.pdf) and [readable preview](docs/research/original-research-poster-preview.svg).
+- [Tests](tests/test_classifier.py).
+
+## Limitations
+
+This is an explainable rule-based baseline, not a calibrated statistical model. Mentions and stance labels are not measures of intent, compliance, or symbolic behavior. Results depend on the supplied target phrase and source text, and ambiguous cases are returned as `Needs review`.
