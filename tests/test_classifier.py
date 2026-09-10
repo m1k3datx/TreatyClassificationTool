@@ -21,6 +21,8 @@ class ClassifierTests(unittest.TestCase):
         cases = {
             "We endorse and urge parliament to ratify the treaty.": SUPPORTING,
             "The government rejects the treaty and advocates withdrawal.": OPPOSING,
+            "The government opposes withdrawal from the treaty.": SUPPORTING,
+            "The government supports withdrawal from the treaty.": OPPOSING,
             "We support the treaty only if enforcement is strengthened.": MIXED_CONDITIONAL,
             "The agreement was signed in 2020 by three parties.": NEUTRAL,
             "The treaty is important.": NEEDS_REVIEW,
@@ -45,6 +47,23 @@ class ClassifierTests(unittest.TestCase):
             self.assertEqual(rows[0]["Category"], SUPPORTING)
             with self.assertRaises(ValueError):
                 process_file(str(path), "", 1)
+
+    def test_headerless_pipe_input_does_not_duplicate_first_record(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "speeches.txt"
+            path.write_text(
+                "1|We support the treaty.\n2|We oppose the treaty.\n",
+                encoding="utf-8",
+            )
+            rows = process_file(str(path), "treaty")
+            self.assertEqual([row["Speech_ID"] for row in rows], ["1", "2"])
+
+    def test_invalid_csv_headers_fail_clearly(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "invalid.csv"
+            path.write_text("speaker,statement\n1,We support the treaty.\n", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "Invalid CSV headers"):
+                process_file(str(path), "treaty")
 
     def test_cli_text_and_csv_output(self):
         self.assertEqual(command_line_main(["--text", "We oppose withdrawal from the treaty."]), 0)

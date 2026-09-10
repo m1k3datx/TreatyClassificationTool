@@ -1,0 +1,3 @@
+1|The government opposes withdrawal from the treaty.
+2|The government supports withdrawal from the treaty.
+3|The agreement was signed in 2020.

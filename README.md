@@ -5,8 +5,8 @@ network calls and never requires an API key.
 
 ## Stance categories
 
-- **Supporting**: endorses the treaty, encourages ratification, or advocates implementing it.
-- **Opposing**: rejects it, advocates withdrawal or blocking, or undermines it.
+- **Supporting**: endorses the treaty, encourages ratification, advocates implementing it, or opposes withdrawal.
+- **Opposing**: rejects it, supports or advocates withdrawal, or favors blocking or undermining it.
 - **Mixed / Conditional**: supports some provisions but opposes others, or supports it only if conditions are met.
 - **Neutral / Descriptive**: describes the treaty without expressing support or opposition.
 - **Needs review**: insufficient or ambiguous evidence; this is the fallback, not a stance.
@@ -29,6 +29,9 @@ The rule-based baseline is deterministic and intentionally conservative.
 `classify_treaty(text)` function remains available and returns only its category.
 An LLM provider can be added behind this interface later, but no provider or
 secret is required for the baseline.
+
+The repository also includes `sample_input.txt` and the corresponding
+`sample_output.csv` for a small end-to-end example.
 
 ## Development
 

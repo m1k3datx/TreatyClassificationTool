@@ -27,13 +27,15 @@ CATEGORIES = (SUPPORTING, OPPOSING, MIXED_CONDITIONAL, NEUTRAL, NEEDS_REVIEW)
 _PATTERNS = {
     SUPPORTING: (
         (r"\b(support|supports|supported|supporting|endorses?|endorsement)\b", 2),
+        (r"\b(oppos(e|es|ed|ing)|opposition|against)\s+(to\s+)?(the\s+)?withdraw(al|ing)?\b", 4),
         (r"\b(urge|urges|urged|encourage|encourages|advocate|advocates)\b.{0,30}\b(ratif|implement|join|adopt)", 3),
         (r"\b(ratif(y|ication|ied)|implement(s|ed|ation)?|adopt(s|ed|ion)?|join(s|ed)?)\b", 2),
         (r"\b(commit(s|ted|ment)?|uphold(s|ing)?|approve[sd]?)\b", 2),
     ),
     OPPOSING: (
-        (r"\b(oppose[sd]?|opposition|reject(s|ed|ion)?|against)\b", 3),
-        (r"\b(withdraw|withdrawal|block(s|ed|ing)?|undermine[sd]?|abandon)\b", 3),
+        (r"\b(oppose[sd]?|opposition|reject(s|ed|ion)?|against)\b(?!\s+(to\s+)?(the\s+)?withdraw(al|ing)?\b)", 3),
+        (r"\b(support(s|ed|ing)?|favor(s|ed|ing)?|advocate(s|d|ing)?|call(s|ed|ing)?)\b.{0,20}\b(withdraw|withdrawal|withdrawing)\b", 4),
+        (r"\b(block(s|ed|ing)?|undermine[sd]?|abandon)\b", 3),
         (r"\b(do not|does not|should not|must not|cannot)\b.{0,30}\b(ratif|implement|join|adopt)", 3),
         (r"\b(leave|exit|renounce|dismantle)(s|d|ing)?\b", 2),
     ),
@@ -121,7 +123,6 @@ def _read_rows(file_path: str) -> Iterable[tuple[str, str]]:
         try:
             with path.open("r", encoding=encoding, newline="") as handle:
                 first_line = handle.readline()
-                handle.seek(0)
                 if "|" in first_line and "," not in first_line:
                     first_identifier, separator, first_text = first_line.rstrip("\n\r").partition("|")
                     has_header = separator and first_identifier.casefold() in {"id", "speech_id"}
@@ -134,10 +135,35 @@ def _read_rows(file_path: str) -> Iterable[tuple[str, str]]:
                         if separator:
                             yield identifier, text
                 else:
+                    handle.seek(0)
                     reader = csv.DictReader(handle)
+                    fieldnames = {
+                        (field or "").strip().lstrip("\ufeff").casefold()
+                        for field in (reader.fieldnames or [])
+                    }
+                    identifier_columns = {"speech_id", "id"} & fieldnames
+                    text_columns = {"mention", "text"} & fieldnames
+                    if not identifier_columns or not text_columns:
+                        raise ValueError(
+                            f"Invalid CSV headers in {file_path}: expected an identifier "
+                            "(Speech_ID or id) and text (Mention or text) column"
+                        )
                     for index, row in enumerate(reader, 2):
-                        identifier = str(row.get("Speech_ID") or row.get("id") or index)
-                        text = str(row.get("Mention") or row.get("text") or "")
+                        normalized_row = {
+                            (key or "").strip().lstrip("\ufeff").casefold(): value
+                            for key, value in row.items()
+                            if key is not None
+                        }
+                        identifier = str(
+                            normalized_row.get("speech_id")
+                            or normalized_row.get("id")
+                            or index
+                        )
+                        text = str(
+                            normalized_row.get("mention")
+                            or normalized_row.get("text")
+                            or ""
+                        )
                         yield identifier, text
                 return
         except UnicodeDecodeError as error:
