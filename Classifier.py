@@ -95,8 +95,12 @@ def _score(text: str, target: str) -> Classification:
     if scores[SUPPORTING] and scores[OPPOSING]:
         scores[MIXED_CONDITIONAL] += 4
         explanations.append("Mixed / Conditional: supporting and opposing evidence")
-    elif not (scores[SUPPORTING] and scores[OPPOSING]) and not re.search(
-        _PATTERNS[MIXED_CONDITIONAL][0][0], target_text, re.IGNORECASE
+    elif not (scores[SUPPORTING] and scores[OPPOSING]) and not any(
+        re.search(pattern, target_text, re.IGNORECASE)
+        for pattern, _weight in (
+            _PATTERNS[MIXED_CONDITIONAL][0],
+            _PATTERNS[MIXED_CONDITIONAL][3],
+        )
     ):
         scores[MIXED_CONDITIONAL] = 0
         explanations = [
