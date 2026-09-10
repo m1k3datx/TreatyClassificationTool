@@ -96,6 +96,14 @@ class ClassifierTests(unittest.TestCase):
         self.assertNotEqual(opposing_withdrawal.category, NEEDS_REVIEW)
         self.assertNotEqual(supporting_withdrawal.category, NEEDS_REVIEW)
 
+    def test_negated_support_is_opposing(self):
+        result = classify_text("We do not support the treaty.", "treaty")
+        self.assertEqual(result.category, OPPOSING)
+
+    def test_negated_opposition_remains_conservative(self):
+        result = classify_text("We do not oppose the treaty.", "treaty")
+        self.assertEqual(result.category, NEEDS_REVIEW)
+
     def test_generic_treaty_vocabulary_cannot_outscore_explicit_stance(self):
         result = classify_text("The treaty agreement was signed, but we reject the treaty.", "treaty")
         self.assertEqual(result.category, OPPOSING)

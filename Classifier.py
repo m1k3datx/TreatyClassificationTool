@@ -55,6 +55,16 @@ _PATTERNS = {
         (r"\b(section|article|provision|date|party|parties)\b", 1),
     ),
 }
+_NEGATED_SUPPORT = re.compile(
+    r"\b(?:do not|does not|did not|cannot|can't|never)\s+"
+    r"(?:support|supports|supported|supporting|endorse|endorses|endorsed|endorsing)\b",
+    re.IGNORECASE,
+)
+_NEGATED_OPPOSE = re.compile(
+    r"\b(?:do not|does not|did not|cannot|can't|never)\s+"
+    r"(?:oppose|opposes|opposed|opposing|reject|rejects|rejected|against)\b",
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True)
@@ -78,17 +88,28 @@ def _score(text: str, target: str) -> Classification:
         if target_pattern.search(sentence)
     ]
     target_text = " ".join(target_sentences)
+    negated_support = _NEGATED_SUPPORT.search(target_text)
+    negated_oppose = _NEGATED_OPPOSE.search(target_text)
+    scoring_text = _NEGATED_SUPPORT.sub(" ", target_text)
+    scoring_text = _NEGATED_OPPOSE.sub(" ", scoring_text)
     scores = {category: 0 for category in CATEGORIES}
     evidence: list[str] = []
     explanations: list[str] = []
 
     for category, patterns in _PATTERNS.items():
         for pattern, weight in patterns:
-            match = re.search(pattern, target_text, re.IGNORECASE)
+            match = re.search(pattern, scoring_text, re.IGNORECASE)
             if match:
                 scores[category] += weight
                 evidence.append(match.group(0))
                 explanations.append(f"{category}: matched configured rule")
+
+    if negated_support:
+        scores[OPPOSING] += 3
+        evidence.append(negated_support.group(0))
+        explanations.append("Opposing: negation reverses explicit support")
+    if negated_oppose:
+        explanations.append("Needs review: negated opposition is not treated as support")
 
     # A conjunction linking positive and negative language is mixed even when
     # no explicit "conditional" phrase appears.
@@ -101,7 +122,7 @@ def _score(text: str, target: str) -> Classification:
             _PATTERNS[MIXED_CONDITIONAL][0],
             _PATTERNS[MIXED_CONDITIONAL][3],
         )
-    ):
+    ) and not negated_support and not negated_oppose:
         scores[MIXED_CONDITIONAL] = 0
         explanations = [
             explanation for explanation in explanations
