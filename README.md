@@ -12,7 +12,26 @@ The research project asks whether countries that make stronger legal commitments
 
 ## What the current tool does
 
-This repository contains an offline, deterministic baseline for classifying treaty mentions. It accepts one text or a pipe-delimited/CSV file, checks for an explicit target, assigns a conservative stance category, and returns an uncalibrated rule score, exact evidence excerpts, and rule explanations. It makes no network calls and requires no API key.
+This repository features an explicit Gemini contextual-analysis workflow and preserves the offline, deterministic rules baseline. Both accept one text or a pipe-delimited/CSV file, check for an explicit target, assign one of the shared stance categories, and return exact evidence excerpts. AI mode sends speech text to Gemini; offline mode makes no network calls and requires no key.
+
+### Gemini AI mode
+
+Install the supported Google Gen AI SDK and configure a key locally (never upload it to GitHub or commit it):
+
+```console
+python -m pip install -r requirements.txt
+set GEMINI_API_KEY=your-key           # Windows PowerShell: $env:GEMINI_API_KEY="your-key"
+python Classifier.py --ai --text "We support the Paris Agreement." --target "Paris Agreement"
+python Classifier.py --ai speeches.txt "Paris Agreement" --output ai-results.csv
+```
+
+Use `--offline-baseline` for the explicit deterministic comparison workflow (it is also the default for backward compatibility):
+
+```console
+python Classifier.py --offline-baseline speeches.txt "Paris Agreement" --output baseline.csv
+```
+
+AI responses are constrained to JSON, checked against the allowed categories, and rejected unless every evidence excerpt is an exact non-empty substring of the source passage. Provider failures, missing keys, quota/network errors, malformed responses, and validation failures return an error; AI mode never silently falls back to rules. The prompt directs Gemini to consider target context, quoted or unrelated speech, negation, withdrawal/exit, and conditional language, but this is not a claim of perfect accuracy. AI mode is a local-user workflow and sends the selected speech passage to Google's Gemini service.
 
 ## Synthetic example
 
@@ -38,7 +57,7 @@ The generated output is preserved in [`docs/demo/synthetic-classification-output
 Python 3.9+ is required and the classifier uses only the standard library:
 
 ```console
-python Classifier.py --text "We urge parliament to ratify the Paris Agreement." --target "Paris Agreement"
+python Classifier.py --offline-baseline --text "We urge parliament to ratify the Paris Agreement." --target "Paris Agreement"
 python Classifier.py speeches.txt "climate treaty" --output results.csv
 python -m unittest discover -s tests -v
 ```
@@ -48,7 +67,7 @@ Input files may be pipe-delimited (`speech_id|text`) or CSV with `Speech_ID` and
 ## Project documentation
 
 - [Case study](docs/case-study.md): research context, scope, contribution, and limitations.
-- [Methodology notes](docs/methodology.md): current rule-based workflow and review boundaries.
+- [Methodology notes](docs/methodology.md): AI response validation, baseline workflow, and review boundaries.
 - [Original research poster](docs/research/original-research-poster.pdf) and [readable preview](docs/research/original-research-poster-preview.svg).
 - [Tests](tests/test_classifier.py).
 
