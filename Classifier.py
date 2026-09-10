@@ -88,7 +88,7 @@ def _score(text: str, target: str) -> Classification:
             if match:
                 scores[category] += weight
                 evidence.append(match.group(0))
-                explanations.append(f"{category}: matched rule `{pattern}`")
+                explanations.append(f"{category}: matched configured rule")
 
     # A conjunction linking positive and negative language is mixed even when
     # no explicit "conditional" phrase appears.
@@ -99,6 +99,10 @@ def _score(text: str, target: str) -> Classification:
         _PATTERNS[MIXED_CONDITIONAL][0][0], target_text, re.IGNORECASE
     ):
         scores[MIXED_CONDITIONAL] = 0
+        explanations = [
+            explanation for explanation in explanations
+            if not explanation.startswith(f"{MIXED_CONDITIONAL}:")
+        ]
 
     ranked = sorted(
         ((score, category) for category, score in scores.items() if category != NEEDS_REVIEW),
