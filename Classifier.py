@@ -26,7 +26,11 @@ CATEGORIES = (SUPPORTING, OPPOSING, MIXED_CONDITIONAL, NEUTRAL, NEEDS_REVIEW)
 
 _PATTERNS = {
     SUPPORTING: (
-        (r"\b(support|supports|supported|supporting|endorses?|endorsement)\b", 2),
+        (
+            r"\b(support|supports|supported|supporting|endorses?|endorsement)\b"
+            r"(?!\s+(?:the\s+)?withdraw(al|ing)?\b)",
+            2,
+        ),
         (r"\b(oppos(e|es|ed|ing)|opposition|against)\s+(to\s+)?(the\s+)?withdraw(al|ing)?\b", 4),
         (r"\b(urge|urges|urged|encourage|encourages|advocate|advocates)\b.{0,30}\b(ratif|implement|join|adopt)", 3),
         (r"\b(ratif(y|ication|ied)|implement(s|ed|ation)?|adopt(s|ed|ion)?|join(s|ed)?)\b", 2),
@@ -126,9 +130,7 @@ def _read_rows(file_path: str) -> Iterable[tuple[str, str]]:
                 if "|" in first_line and "," not in first_line:
                     first_identifier, separator, first_text = first_line.rstrip("\n\r").partition("|")
                     has_header = separator and first_identifier.casefold() in {"id", "speech_id"}
-                    if has_header:
-                        next(handle, None)
-                    elif separator:
+                    if not has_header and separator:
                         yield first_identifier, first_text
                     for line_number, line in enumerate(handle, 2):
                         identifier, separator, text = line.rstrip("\n\r").partition("|")

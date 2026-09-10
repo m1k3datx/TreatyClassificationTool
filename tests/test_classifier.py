@@ -48,6 +48,16 @@ class ClassifierTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 process_file(str(path), "", 1)
 
+    def test_headered_pipe_input_keeps_first_data_record(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "speeches.txt"
+            path.write_text(
+                "id|text\n1|We support the treaty.\n2|We oppose the treaty.\n",
+                encoding="utf-8",
+            )
+            rows = process_file(str(path), "treaty")
+            self.assertEqual([row["Speech_ID"] for row in rows], ["1", "2"])
+
     def test_headerless_pipe_input_does_not_duplicate_first_record(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "speeches.txt"
@@ -74,6 +84,15 @@ class ClassifierTests(unittest.TestCase):
             self.assertEqual(command_line_main([str(input_path), "treaty", "-o", str(output_path)]), 0)
             with output_path.open(newline="", encoding="utf-8") as handle:
                 self.assertEqual(next(csv.DictReader(handle))["Category"], SUPPORTING)
+
+    def test_withdrawal_stance_is_target_aware_and_not_ambiguous(self):
+        opposing_withdrawal = classify_text("The government supports withdrawal from the treaty.")
+        supporting_withdrawal = classify_text("The government opposes withdrawal from the treaty.")
+
+        self.assertEqual(opposing_withdrawal.category, OPPOSING)
+        self.assertEqual(supporting_withdrawal.category, SUPPORTING)
+        self.assertNotEqual(opposing_withdrawal.category, NEEDS_REVIEW)
+        self.assertNotEqual(supporting_withdrawal.category, NEEDS_REVIEW)
 
 
 if __name__ == "__main__":
