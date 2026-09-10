@@ -16,22 +16,30 @@ network calls and never requires an API key.
 Python 3.9+ is required. The classifier uses only the standard library:
 
 ```console
-python Classifier.py --text "We urge parliament to ratify the treaty."
+python Classifier.py --text "We urge parliament to ratify the Paris Agreement." --target "Paris Agreement"
 python Classifier.py speeches.txt "climate treaty" --output results.csv
 ```
 
 Input files may be pipe-delimited (`speech_id|text`) or CSV with `Speech_ID`
 and `Mention` (or `id` and `text`) columns. Output includes the category,
-confidence score, and matched evidence so results can be reviewed.
+an uncalibrated rule score, exact evidence excerpts copied from the source,
+and separate rule explanations so results can be reviewed.
 
 The rule-based baseline is deterministic and intentionally conservative.
-`classify_text()` returns the full `Classification` object; the legacy
-`classify_treaty(text)` function remains available and returns only its category.
+Single-text classification requires an explicit `target`; when it is missing
+or absent from the text, the result is `Needs review`. File processing uses
+the search term as the target. `classify_text()` returns the full
+`Classification` object; the legacy `classify_treaty(text)` function remains
+available and returns only its category when passed `target=`.
 An LLM provider can be added behind this interface later, but no provider or
 secret is required for the baseline.
 
 The repository also includes `sample_input.txt` and the corresponding
-`sample_output.csv` for a small end-to-end example.
+`sample_output.csv`. Recreate it with:
+
+```console
+python Classifier.py sample_input.txt treaty --output sample_output.csv
+```
 
 ## Development
 

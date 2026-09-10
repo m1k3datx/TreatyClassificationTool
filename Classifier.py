@@ -50,7 +50,7 @@ _PATTERNS = {
         (r"\b(support|favor)\b.{0,40}\b(but|however|unless|only if)\b", 4),
     ),
     NEUTRAL: (
-        (r"\b(signed|signing|ratified|entered into force|agreement|treaty)\b", 1),
+        (r"\b(signed|signing|ratified|entered into force|agreement)\b", 1),
         (r"\b(describe[sd]?|reported|reports|noted|stated|explained)\b", 1),
         (r"\b(section|article|provision|date|party|parties)\b", 1),
     ),
@@ -62,28 +62,39 @@ class Classification:
     """A classification plus the evidence used to reach it."""
 
     category: str
-    confidence: float
+    rule_score: float
     scores: dict[str, int]
     evidence: tuple[str, ...]
+    rule_explanations: tuple[str, ...] = ()
 
 
-def _score(text: str) -> Classification:
-    normalized = " ".join(text.lower().split())
+def _score(text: str, target: str) -> Classification:
+    normalized = " ".join(text.split())
+    target_pattern = re.compile(re.escape(target), re.IGNORECASE)
+    quoted = re.compile(r"""(["']).*?\1|“.*?”|‘.*?’""", re.DOTALL)
+    unquoted = quoted.sub(" ", normalized)
+    target_sentences = [
+        sentence for sentence in re.split(r"(?<=[.!?])\s+", unquoted)
+        if target_pattern.search(sentence)
+    ]
+    target_text = " ".join(target_sentences)
     scores = {category: 0 for category in CATEGORIES}
     evidence: list[str] = []
+    explanations: list[str] = []
 
     for category, patterns in _PATTERNS.items():
         for pattern, weight in patterns:
-            match = re.search(pattern, normalized)
+            match = re.search(pattern, target_text, re.IGNORECASE)
             if match:
                 scores[category] += weight
-                evidence.append(f"{category}: {match.group(0)}")
+                evidence.append(match.group(0))
+                explanations.append(f"{category}: matched rule `{pattern}`")
 
     # A conjunction linking positive and negative language is mixed even when
     # no explicit "conditional" phrase appears.
     if scores[SUPPORTING] and scores[OPPOSING]:
         scores[MIXED_CONDITIONAL] += 4
-        evidence.append("Mixed / Conditional: supporting and opposing evidence")
+        explanations.append("Mixed / Conditional: supporting and opposing evidence")
 
     ranked = sorted(
         ((score, category) for category, score in scores.items() if category != NEEDS_REVIEW),
@@ -91,32 +102,46 @@ def _score(text: str) -> Classification:
     )
     best_score, best_category = ranked[0]
     second_score = ranked[1][0]
-    if best_score < 2 or best_score == second_score or best_score - second_score < 2:
+    has_stance = scores[SUPPORTING] or scores[OPPOSING] or scores[MIXED_CONDITIONAL]
+    if has_stance:
+        scores[NEUTRAL] = 0
+        ranked = sorted(
+            ((score, category) for category, score in scores.items() if category != NEEDS_REVIEW),
+            reverse=True,
+        )
+        best_score, best_category = ranked[0]
+        second_score = ranked[1][0]
+    neutral_single_signal = best_category == NEUTRAL and best_score == 1 and not has_stance
+    if not neutral_single_signal and (
+        best_score < 2 or best_score == second_score or best_score - second_score < 2
+    ):
         category = NEEDS_REVIEW
-        confidence = 0.0 if best_score == 0 else min(0.49, best_score / 10)
+        rule_score = 0.0 if best_score == 0 else min(0.49, best_score / 10)
     else:
         category = best_category
-        confidence = min(0.99, 0.5 + (best_score - second_score) / 10)
-    return Classification(category, round(confidence, 2), scores, tuple(evidence))
+        rule_score = min(0.99, 0.5 + (best_score - second_score) / 10)
+    return Classification(category, round(rule_score, 2), scores, tuple(evidence), tuple(explanations))
 
 
-def classify_text(text: str) -> Classification:
-    """Classify one mention and expose scores/evidence for audits."""
+def classify_text(text: str, target: Optional[str] = None) -> Classification:
+    """Classify one mention; without an explicit target, remain conservative."""
     if not isinstance(text, str):
         raise TypeError("text must be a string")
-    if not text.strip():
+    if not text.strip() or not target or not target.strip():
         return Classification(NEEDS_REVIEW, 0.0, {c: 0 for c in CATEGORIES}, ())
-    return _score(text)
+    if not re.search(re.escape(target), text, re.IGNORECASE):
+        return Classification(NEEDS_REVIEW, 0.0, {c: 0 for c in CATEGORIES}, ())
+    return _score(text, target.strip())
 
 
-def classify_treaty(text: str, max_attempts: int = 1) -> str:
+def classify_treaty(text: str, max_attempts: int = 1, target: Optional[str] = None) -> str:
     """Return the category name (compatible with the original public API).
 
     ``max_attempts`` is accepted for callers of the former provider-backed
     implementation; the offline baseline does not retry or make network calls.
     """
     del max_attempts
-    return classify_text(text).category
+    return classify_text(text, target).category
 
 
 def _read_rows(file_path: str) -> Iterable[tuple[str, str]]:
@@ -193,13 +218,14 @@ def process_file(
         if not check_running():
             break
         if term in text.casefold():
-            result = classify_text(text)
+            result = classify_text(text, search_term)
             results.append({
                 "Speech_ID": speech_id,
                 "Mention": text,
                 "Category": result.category,
-                "Confidence": result.confidence,
+                "Rule_Score": result.rule_score,
                 "Evidence": "; ".join(result.evidence),
+                "Rule_Explanations": "; ".join(result.rule_explanations),
             })
     return results
 
@@ -212,15 +238,17 @@ def command_line_main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("-l", "--limit", type=int, default=0, help="Maximum matching mentions (0 means all)")
     parser.add_argument("-b", "--batch-size", type=int, default=5, help="Compatibility option; must be positive")
     parser.add_argument("--text", help="Classify one text directly instead of reading a file")
+    parser.add_argument("--target", help="Explicit treaty name or target phrase for --text")
     args = parser.parse_args(argv)
 
     if args.batch_size < 1 or args.limit < 0:
         parser.error("--batch-size must be positive and --limit cannot be negative")
     if args.text is not None:
-        result = classify_text(args.text)
+        result = classify_text(args.text, args.target)
         print(f"Category: {result.category}")
-        print(f"Confidence: {result.confidence:.2f}")
-        print(f"Evidence: {'; '.join(result.evidence) or 'none'}")
+        print(f"Uncalibrated rule score: {result.rule_score:.2f}")
+        print(f"Evidence: {', '.join(result.evidence) or 'none'}")
+        print(f"Rule explanations: {'; '.join(result.rule_explanations) or 'none'}")
         return 0
     if not args.file or not args.search_term:
         parser.error("file and search_term are required unless --text is used")

@@ -1,4 +1,4 @@
-Speech_ID,Mention,Category,Confidence,Evidence
-1,The government opposes withdrawal from the treaty.,Supporting,0.8,Supporting: opposes withdrawal
-2,The government supports withdrawal from the treaty.,Opposing,0.7,Supporting: supports; Opposing: supports withdrawal
-3,The agreement was signed in 2020.,Neutral / Descriptive,0.7,Neutral / Descriptive: signed; Neutral / Descriptive: treaty
+Speech_ID,Mention,Category,Rule_Score,Evidence,Rule_Explanations
+1,The government opposes withdrawal from the treaty.,Supporting,0.9,opposes withdrawal,Supporting: matched rule `\b(oppos(e|es|ed|ing)|opposition|against)\b\s+(to\s+)?(the\s+)?withdraw(al|ing)?\b`
+2,The government supports withdrawal from the treaty.,Opposing,0.9,supports withdrawal,Opposing: matched rule `\b(support(s|ed|ing)?|favor(s|ed|ing)?|advocate(s|d|ing)?|call(s|ed|ing)?)\b.{0,20}\b(withdraw|withdrawal|withdrawing)\b`
+3,The treaty agreement was signed in 2020.,Neutral / Descriptive,0.6,signed,Neutral / Descriptive: matched rule `\b(signed|signing|ratified|entered into force|agreement)\b`
