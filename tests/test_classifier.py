@@ -221,6 +221,34 @@ class ClassifierTests(unittest.TestCase):
                     0,
                 )
 
+    def test_ai_limit_stops_provider_calls(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "input.txt"
+            output = Path(directory) / "output.csv"
+            path.write_text("id|text\n1|We support the treaty.\n2|We support the treaty.\n")
+            with patch("Classifier.GeminiProvider") as factory:
+                provider = factory.return_value
+                provider.return_value = {
+                    "category": SUPPORTING, "evidence": ["support the treaty"],
+                    "explanation": "Explicit support", "score": 0.8,
+                }
+                with contextlib.redirect_stdout(io.StringIO()):
+                    status = command_line_main([str(path), "treaty", "--ai",
+                        "--limit", "1", "--model", "test-model", "-o", str(output)])
+                self.assertEqual(status, 0)
+                self.assertEqual(provider.call_count, 1)
+                factory.assert_called_once_with(model="test-model")
+                with output.open() as handle:
+                    self.assertEqual(len(list(csv.DictReader(handle))), 1)
+
+    def test_model_environment_and_explicit_precedence(self):
+        from Classifier import GeminiProvider, DEFAULT_GEMINI_MODEL
+        with patch.dict("os.environ", {"GEMINI_API_KEY": "test-only"}, clear=True):
+            self.assertEqual(GeminiProvider().model, DEFAULT_GEMINI_MODEL)
+            with patch.dict("os.environ", {"GEMINI_MODEL": "environment-model"}):
+                self.assertEqual(GeminiProvider().model, "environment-model")
+                self.assertEqual(GeminiProvider(model="explicit-model").model, "explicit-model")
+
 
 if __name__ == "__main__":
     unittest.main()
