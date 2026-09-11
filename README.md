@@ -12,7 +12,24 @@ The research project asks whether countries that make stronger legal commitments
 
 ## What the current tool does
 
-This repository features an explicit Gemini contextual-analysis workflow and preserves the offline, deterministic rules baseline. Both accept one text or a pipe-delimited/CSV file, check for an explicit target, assign one of the shared stance categories, and return exact evidence excerpts. AI mode sends speech text to Gemini; offline mode makes no network calls and requires no key.
+Choose OpenAI analysis with a second review pass and a final report, Gemini contextual classification, or the offline rules baseline. AI modes send the selected passages to their respective provider; offline mode requires no key. All use the same stance categories.
+
+### OpenAI research workflow
+
+The OpenAI Agents SDK runs a bounded classification-and-review workflow. Python checks that evidence appears verbatim in the source. Disagreement, invalid quotations, or uncertain classifications go to `Needs review`. The report includes source passages, both judgments, verification checks, counts, model name, prompt version, and source hashes. AI agreement is not human validation.
+
+Use Python 3.12 or newer and install `requirements.txt`, then configure `OPENAI_API_KEY` in your environment or a local `.env.local` file. This file and generated `reports/` are ignored by Git. Never upload keys. Each person running the public project supplies their own key and pays their provider's API charges. See [validation status](VALIDATION.md) for test results and live-service limitations.
+
+```console
+python research_agent.py --text "We support the Paris Agreement." --target "Paris Agreement" --model gpt-6-astra --output reports/example
+python research_agent.py --file speeches.txt --target "Paris Agreement" --model gpt-6-astra --limit 3 --output reports/batch
+```
+
+Set `OPENAI_MODEL` to avoid repeating `--model`. Choose a model available to your account; there is no hidden model fallback. Each passage makes two model calls, with retries disabled and output tokens bounded. The default limit is ten passages. Existing reports are not overwritten. A provider failure stops the run with an error; it never substitutes offline output or publishes a partial report as complete.
+
+Outputs are a readable Markdown report and a JSON audit record. File mode selects literal target matches; aliases need preprocessing or explicit single-passage analysis. Selected text is sent to OpenAI. SDK tracing is disabled and response storage is requested off; provider retention policies still apply. This CLI does not deploy a public website.
+
+Built using the [OpenAI Agents SDK](https://openai.github.io/openai-agents-python/) and Responses API. The SDK keeps orchestration in this Python application; it is distinct from OpenAI's hosted Agents API. Automated tests cover evidence rejection, disagreement, report counts and provider failures, not research accuracy.
 
 ### Gemini AI mode
 
@@ -54,7 +71,7 @@ The generated output is preserved in [`docs/demo/synthetic-classification-output
 
 ## Quick start
 
-Python 3.9+ is required and the classifier uses only the standard library:
+The offline baseline uses only the Python standard library; AI mode additionally requires the Google Gen AI SDK from requirements.txt.
 
 ```console
 python Classifier.py --offline-baseline --text "We urge parliament to ratify the Paris Agreement." --target "Paris Agreement"
@@ -73,4 +90,14 @@ Input files may be pipe-delimited (`speech_id|text`) or CSV with `Speech_ID` and
 
 ## Limitations
 
-This is an explainable rule-based baseline, not a calibrated statistical model. Mentions and stance labels are not measures of intent, compliance, or symbolic behavior. Results depend on the supplied target phrase and source text, and ambiguous cases are returned as `Needs review`.
+The AI workflows and offline baseline are research aids, not calibrated measures of intent, compliance, or symbolic behavior. Results depend on the supplied target phrase and source text. Human-coded evaluation is needed to measure accuracy; automated evidence checks and a second AI pass cannot establish it.
+
+### Model selection and verification
+
+AI mode uses `--model`, then `GEMINI_MODEL`, then `gemini-3.6-flash`. Example:
+
+```console
+python Classifier.py --ai --model gemini-3.6-flash speeches.txt "Paris Agreement" --limit 3
+```
+
+`--limit` stops after that many matching records, including AI requests; zero means all. Model access depends on your account. The default follows Google's replacement for retired Gemini 2.0 Flash, checked September 10, 2026: [Google model lifecycle](https://ai.google.dev/gemini-api/docs/deprecations). Mocked tests do not verify a real API request or classification accuracy. AI scores are model-generated, uncalibrated estimates, not validated probabilities.

@@ -24,7 +24,7 @@ MIXED_CONDITIONAL = "Mixed / Conditional"
 NEUTRAL = "Neutral / Descriptive"
 NEEDS_REVIEW = "Needs review"
 CATEGORIES = (SUPPORTING, OPPOSING, MIXED_CONDITIONAL, NEUTRAL, NEEDS_REVIEW)
-DEFAULT_GEMINI_MODEL = "gemini-2.0-flash"
+DEFAULT_GEMINI_MODEL = "gemini-3.6-flash"
 
 _PATTERNS = {
     SUPPORTING: (
@@ -120,13 +120,13 @@ def parse_ai_response(response: object, source_text: str) -> Classification:
 class GeminiProvider:
     """Small boundary around the current Google Gen AI SDK, kept mockable in tests."""
 
-    def __init__(self, api_key: Optional[str] = None, model: str = DEFAULT_GEMINI_MODEL):
+    def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
         self.api_key = api_key or os.getenv("GEMINI_API_KEY")
         if not self.api_key:
             raise AIAnalysisError(
                 "GEMINI_API_KEY is required for AI mode; set it in your local environment"
             )
-        self.model = model
+        self.model = model or os.getenv("GEMINI_MODEL") or DEFAULT_GEMINI_MODEL
 
     def __call__(self, source_text: str, target: str) -> object:
         try:
@@ -347,10 +347,13 @@ def process_file(
     check_running: Optional[Callable[[], bool]] = None,
     mode: str = "offline-baseline",
     provider: Optional[Callable[[str, str], object]] = None,
+    limit: int = 0,
 ) -> list[dict[str, object]]:
     """Find mentions in a pipe-delimited or CSV file and classify them."""
     if not search_term.strip():
         raise ValueError("search_term cannot be empty")
+    if limit < 0:
+        raise ValueError("limit cannot be negative")
     if batch_size < 1:
         raise ValueError("batch_size must be at least 1")
     if mode not in {"offline-baseline", "ai"}:
@@ -386,6 +389,8 @@ def process_file(
                     "Rule_Explanations": "; ".join(result.rule_explanations),
                 })
             results.append(row)
+            if limit and len(results) >= limit:
+                break
     return results
 
 
@@ -404,6 +409,7 @@ def command_line_main(argv: Optional[list[str]] = None) -> int:
         "--offline-baseline", action="store_true",
         help="Use the explicit deterministic regex baseline (default)",
     )
+    parser.add_argument("--model", help="Gemini model override (otherwise GEMINI_MODEL or default)")
     args = parser.parse_args(argv)
 
     if args.batch_size < 1 or args.limit < 0:
@@ -411,7 +417,7 @@ def command_line_main(argv: Optional[list[str]] = None) -> int:
     if args.text is not None:
         try:
             result = (
-                classify_ai_text(args.text, args.target)
+                classify_ai_text(args.text, args.target, GeminiProvider(model=args.model))
                 if args.ai else classify_text(args.text, args.target)
             )
         except (AIAnalysisError, OSError, ValueError) as error:
@@ -429,12 +435,12 @@ def command_line_main(argv: Optional[list[str]] = None) -> int:
         rows = process_file(
             args.file, args.search_term, args.batch_size,
             mode="ai" if args.ai else "offline-baseline",
+            provider=GeminiProvider(model=args.model) if args.ai else None,
+            limit=args.limit,
         )
     except (AIAnalysisError, OSError, ValueError) as error:
         print(f"Error: {error}", file=sys.stderr)
         return 2
-    if args.limit:
-        rows = rows[:args.limit]
     if not rows:
         print("No matching mentions found.")
         return 0
