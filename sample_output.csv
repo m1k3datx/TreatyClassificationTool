@@ -1,4 +1,4 @@
-Speech_ID,Mention,Category,Rule_Score,Evidence,Rule_Explanations
-1,The government opposes withdrawal from the treaty.,Supporting,0.9,opposes withdrawal,Supporting: matched configured rule
-2,The government supports withdrawal from the treaty.,Opposing,0.9,supports withdrawal,Opposing: matched configured rule
-3,The treaty agreement was signed in 2020.,Neutral / Descriptive,0.6,agreement,Neutral / Descriptive: matched configured rule
+Speech_ID,Mention,Category,Evidence,Rule_Score,Rule_Explanations
+1,The government opposes withdrawal from the treaty.,Supporting,opposes withdrawal,0.9,Supporting: matched configured rule
+2,The government supports withdrawal from the treaty.,Opposing,supports withdrawal,0.9,Opposing: matched configured rule
+3,The treaty agreement was signed in 2020.,Neutral / Descriptive,agreement,0.6,Neutral / Descriptive: matched configured rule

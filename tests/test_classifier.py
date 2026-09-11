@@ -3,15 +3,18 @@ import contextlib
 import io
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 from Classifier import (
+    AIAnalysisError,
     MIXED_CONDITIONAL,
     NEEDS_REVIEW,
     NEUTRAL,
     OPPOSING,
     SUPPORTING,
     classify_text,
+    classify_ai_text,
     classify_treaty,
     command_line_main,
     process_file,
@@ -148,6 +151,103 @@ class ClassifierTests(unittest.TestCase):
                 output_path.read_text(encoding="utf-8"),
                 (root / "sample_output.csv").read_text(encoding="utf-8"),
             )
+
+    def test_ai_response_parsing_and_evidence_validation(self):
+        provider = lambda _text, _target: {
+            "category": SUPPORTING,
+            "evidence": ["support the treaty"],
+            "explanation": "The speaker explicitly supports the target.",
+            "score": 0.91,
+        }
+        result = classify_ai_text("We support the treaty.", "treaty", provider)
+        self.assertEqual(result.category, SUPPORTING)
+        self.assertEqual(result.evidence, ("support the treaty",))
+        with self.assertRaisesRegex(AIAnalysisError, "exact source substrings"):
+            classify_ai_text(
+                "We support the treaty.", "treaty",
+                lambda _text, _target: {
+                    "category": SUPPORTING, "evidence": ["fabricated excerpt"],
+                    "explanation": "not valid", "score": 0.8,
+                },
+            )
+
+    def test_ai_invalid_schema_and_category_fail(self):
+        with self.assertRaisesRegex(AIAnalysisError, "invalid JSON"):
+            classify_ai_text("The treaty matters.", "treaty", lambda _t, _x: "not json")
+        with self.assertRaisesRegex(AIAnalysisError, "unsupported category"):
+            classify_ai_text(
+                "The treaty matters.", "treaty",
+                lambda _t, _x: {
+                    "category": "Unknown", "evidence": ["treaty"],
+                    "explanation": "x", "score": 0.2,
+                },
+            )
+
+    def test_ai_requires_key_and_does_not_fallback(self):
+        with patch.dict("os.environ", {}, clear=True):
+            with self.assertRaisesRegex(AIAnalysisError, "GEMINI_API_KEY"):
+                classify_ai_text("We support the treaty.", "treaty")
+        with self.assertRaisesRegex(AIAnalysisError, "provider unavailable"):
+            classify_ai_text(
+                "We support the treaty.", "treaty",
+                lambda _t, _x: (_ for _ in ()).throw(
+                    AIAnalysisError("provider unavailable")
+                ),
+            )
+
+    def test_ai_file_mode_and_cli_mode_selection(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "speeches.txt"
+            path.write_text("id|text\n1|We support the treaty.\n", encoding="utf-8")
+            rows = __import__("Classifier").process_file(
+                str(path), "treaty", mode="ai",
+                provider=lambda _t, _x: {
+                    "category": SUPPORTING, "evidence": ["support the treaty"],
+                    "explanation": "explicit support", "score": 0.9,
+                },
+            )
+            self.assertEqual(rows[0]["Category"], SUPPORTING)
+            self.assertIn("AI_Score", rows[0])
+        with patch("Classifier.GeminiProvider") as provider:
+            provider.return_value = lambda _t, _x: {
+                "category": SUPPORTING, "evidence": ["support the treaty"],
+                "explanation": "explicit support", "score": 0.9,
+            }
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(
+                    command_line_main(
+                        ["--ai", "--text", "We support the treaty.", "--target", "treaty"]
+                    ),
+                    0,
+                )
+
+    def test_ai_limit_stops_provider_calls(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "input.txt"
+            output = Path(directory) / "output.csv"
+            path.write_text("id|text\n1|We support the treaty.\n2|We support the treaty.\n")
+            with patch("Classifier.GeminiProvider") as factory:
+                provider = factory.return_value
+                provider.return_value = {
+                    "category": SUPPORTING, "evidence": ["support the treaty"],
+                    "explanation": "Explicit support", "score": 0.8,
+                }
+                with contextlib.redirect_stdout(io.StringIO()):
+                    status = command_line_main([str(path), "treaty", "--ai",
+                        "--limit", "1", "--model", "test-model", "-o", str(output)])
+                self.assertEqual(status, 0)
+                self.assertEqual(provider.call_count, 1)
+                factory.assert_called_once_with(model="test-model")
+                with output.open() as handle:
+                    self.assertEqual(len(list(csv.DictReader(handle))), 1)
+
+    def test_model_environment_and_explicit_precedence(self):
+        from Classifier import GeminiProvider, DEFAULT_GEMINI_MODEL
+        with patch.dict("os.environ", {"GEMINI_API_KEY": "test-only"}, clear=True):
+            self.assertEqual(GeminiProvider().model, DEFAULT_GEMINI_MODEL)
+            with patch.dict("os.environ", {"GEMINI_MODEL": "environment-model"}):
+                self.assertEqual(GeminiProvider().model, "environment-model")
+                self.assertEqual(GeminiProvider(model="explicit-model").model, "explicit-model")
 
 
 if __name__ == "__main__":

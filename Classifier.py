@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import os
 import re
 import sys
@@ -23,6 +24,7 @@ MIXED_CONDITIONAL = "Mixed / Conditional"
 NEUTRAL = "Neutral / Descriptive"
 NEEDS_REVIEW = "Needs review"
 CATEGORIES = (SUPPORTING, OPPOSING, MIXED_CONDITIONAL, NEUTRAL, NEEDS_REVIEW)
+DEFAULT_GEMINI_MODEL = "gemini-3.6-flash"
 
 _PATTERNS = {
     SUPPORTING: (
@@ -76,6 +78,113 @@ class Classification:
     scores: dict[str, int]
     evidence: tuple[str, ...]
     rule_explanations: tuple[str, ...] = ()
+
+
+class AIAnalysisError(RuntimeError):
+    """An actionable AI configuration, provider, or response validation error."""
+
+
+def parse_ai_response(response: object, source_text: str) -> Classification:
+    """Validate a provider response without trusting model-generated evidence."""
+    try:
+        payload = json.loads(response) if isinstance(response, str) else response
+    except json.JSONDecodeError as error:
+        raise AIAnalysisError("Gemini returned invalid JSON") from error
+    if not isinstance(payload, dict):
+        raise AIAnalysisError("Gemini response must be a JSON object")
+    category = payload.get("category")
+    explanation = payload.get("explanation")
+    evidence = payload.get("evidence")
+    score = payload.get("score", 0.5)
+    if category not in CATEGORIES:
+        raise AIAnalysisError(f"Gemini returned unsupported category: {category!r}")
+    if not isinstance(explanation, str) or not explanation.strip():
+        raise AIAnalysisError("Gemini response requires a non-empty explanation")
+    if not isinstance(evidence, list) or not evidence or not all(
+        isinstance(item, str) and item and item in source_text for item in evidence
+    ):
+        raise AIAnalysisError(
+            "Gemini evidence must contain non-empty excerpts that are exact source substrings"
+        )
+    if not isinstance(score, (int, float)) or isinstance(score, bool) or not 0 <= score <= 1:
+        raise AIAnalysisError("Gemini score must be a number between 0 and 1")
+    return Classification(
+        category,
+        round(float(score), 2),
+        {category: 1},
+        tuple(evidence),
+        (explanation.strip(),),
+    )
+
+
+class GeminiProvider:
+    """Small boundary around the current Google Gen AI SDK, kept mockable in tests."""
+
+    def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
+        self.api_key = api_key or os.getenv("GEMINI_API_KEY")
+        if not self.api_key:
+            raise AIAnalysisError(
+                "GEMINI_API_KEY is required for AI mode; set it in your local environment"
+            )
+        self.model = model or os.getenv("GEMINI_MODEL") or DEFAULT_GEMINI_MODEL
+
+    def __call__(self, source_text: str, target: str) -> object:
+        try:
+            from google import genai
+        except ImportError as error:
+            raise AIAnalysisError(
+                "AI mode requires the google-genai package; install requirements.txt"
+            ) from error
+        prompt = f"""Classify the stance toward the target treaty in the source passage.
+Target: {target}
+Source passage:
+{source_text}
+
+Return JSON only with this exact shape:
+{{"category":"...", "evidence":["exact excerpt"], "explanation":"...", "score":0.0}}
+Allowed categories: {", ".join(CATEGORIES)}.
+Use only the passage as evidence. Ignore unrelated sentences and quoted speech that
+does not represent the speaker's own stance. Account for negation, withdrawal or exit,
+and conditional language; do not claim perfect accuracy. Evidence must be copied
+verbatim from the source passage. Use Needs review when the stance is unclear."""
+        try:
+            client = genai.Client(api_key=self.api_key)
+            response = client.models.generate_content(
+                model=self.model,
+                contents=prompt,
+                config={
+                    "response_mime_type": "application/json",
+                    "response_schema": {
+                        "type": "OBJECT",
+                        "properties": {
+                            "category": {"type": "STRING", "enum": list(CATEGORIES)},
+                            "evidence": {"type": "ARRAY", "items": {"type": "STRING"}},
+                            "explanation": {"type": "STRING"},
+                            "score": {"type": "NUMBER"},
+                        },
+                        "required": ["category", "evidence", "explanation", "score"],
+                    },
+                },
+            )
+            return response.text
+        except AIAnalysisError:
+            raise
+        except Exception as error:
+            raise AIAnalysisError(f"Gemini API request failed: {error}") from error
+
+
+def classify_ai_text(
+    text: str,
+    target: Optional[str],
+    provider: Optional[Callable[[str, str], object]] = None,
+) -> Classification:
+    """Classify one passage with Gemini; provider errors never fall back to rules."""
+    if not isinstance(text, str):
+        raise TypeError("text must be a string")
+    if not text.strip() or not target or not target.strip():
+        raise AIAnalysisError("AI mode requires non-empty text and an explicit target")
+    provider = provider or GeminiProvider()
+    return parse_ai_response(provider(text, target.strip()), text)
 
 
 def _score(text: str, target: str) -> Classification:
@@ -236,12 +345,19 @@ def process_file(
     search_term: str,
     batch_size: int = 5,
     check_running: Optional[Callable[[], bool]] = None,
+    mode: str = "offline-baseline",
+    provider: Optional[Callable[[str, str], object]] = None,
+    limit: int = 0,
 ) -> list[dict[str, object]]:
     """Find mentions in a pipe-delimited or CSV file and classify them."""
     if not search_term.strip():
         raise ValueError("search_term cannot be empty")
+    if limit < 0:
+        raise ValueError("limit cannot be negative")
     if batch_size < 1:
         raise ValueError("batch_size must be at least 1")
+    if mode not in {"offline-baseline", "ai"}:
+        raise ValueError("mode must be 'offline-baseline' or 'ai'")
     if not os.path.isfile(file_path):
         raise FileNotFoundError(file_path)
     check_running = check_running or (lambda: True)
@@ -251,20 +367,35 @@ def process_file(
         if not check_running():
             break
         if term in text.casefold():
-            result = classify_text(text, search_term)
-            results.append({
+            result = (
+                classify_ai_text(text, search_term, provider)
+                if mode == "ai"
+                else classify_text(text, search_term)
+            )
+            row = {
                 "Speech_ID": speech_id,
                 "Mention": text,
                 "Category": result.category,
-                "Rule_Score": result.rule_score,
                 "Evidence": "; ".join(result.evidence),
-                "Rule_Explanations": "; ".join(result.rule_explanations),
-            })
+            }
+            if mode == "ai":
+                row.update({
+                    "AI_Score": result.rule_score,
+                    "AI_Explanation": "; ".join(result.rule_explanations),
+                })
+            else:
+                row.update({
+                    "Rule_Score": result.rule_score,
+                    "Rule_Explanations": "; ".join(result.rule_explanations),
+                })
+            results.append(row)
+            if limit and len(results) >= limit:
+                break
     return results
 
 
 def command_line_main(argv: Optional[list[str]] = None) -> int:
-    parser = argparse.ArgumentParser(description="Classify treaty mentions offline.")
+    parser = argparse.ArgumentParser(description="Classify treaty mentions with Gemini or offline rules.")
     parser.add_argument("file", nargs="?", help="Pipe-delimited or CSV input file")
     parser.add_argument("search_term", nargs="?", help="Treaty name or keyword")
     parser.add_argument("-o", "--output", help="Output CSV path")
@@ -272,23 +403,44 @@ def command_line_main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("-b", "--batch-size", type=int, default=5, help="Compatibility option; must be positive")
     parser.add_argument("--text", help="Classify one text directly instead of reading a file")
     parser.add_argument("--target", help="Explicit treaty name or target phrase for --text")
+    mode_group = parser.add_mutually_exclusive_group()
+    mode_group.add_argument("--ai", action="store_true", help="Use Gemini contextual analysis")
+    mode_group.add_argument(
+        "--offline-baseline", action="store_true",
+        help="Use the explicit deterministic regex baseline (default)",
+    )
+    parser.add_argument("--model", help="Gemini model override (otherwise GEMINI_MODEL or default)")
     args = parser.parse_args(argv)
 
     if args.batch_size < 1 or args.limit < 0:
         parser.error("--batch-size must be positive and --limit cannot be negative")
     if args.text is not None:
-        result = classify_text(args.text, args.target)
+        try:
+            result = (
+                classify_ai_text(args.text, args.target, GeminiProvider(model=args.model))
+                if args.ai else classify_text(args.text, args.target)
+            )
+        except (AIAnalysisError, OSError, ValueError) as error:
+            print(f"Error: {error}", file=sys.stderr)
+            return 2
         print(f"Category: {result.category}")
-        print(f"Uncalibrated rule score: {result.rule_score:.2f}")
+        print(f"{'AI' if args.ai else 'Uncalibrated rule'} score: {result.rule_score:.2f}")
         print(f"Evidence: {', '.join(result.evidence) or 'none'}")
-        print(f"Rule explanations: {'; '.join(result.rule_explanations) or 'none'}")
+        print(f"Explanation: {'; '.join(result.rule_explanations) or 'none'}")
         return 0
     if not args.file or not args.search_term:
         parser.error("file and search_term are required unless --text is used")
 
-    rows = process_file(args.file, args.search_term, args.batch_size)
-    if args.limit:
-        rows = rows[:args.limit]
+    try:
+        rows = process_file(
+            args.file, args.search_term, args.batch_size,
+            mode="ai" if args.ai else "offline-baseline",
+            provider=GeminiProvider(model=args.model) if args.ai else None,
+            limit=args.limit,
+        )
+    except (AIAnalysisError, OSError, ValueError) as error:
+        print(f"Error: {error}", file=sys.stderr)
+        return 2
     if not rows:
         print("No matching mentions found.")
         return 0
